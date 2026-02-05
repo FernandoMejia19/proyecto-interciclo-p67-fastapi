@@ -63,23 +63,22 @@ def crear_reserva(
 
 
 
-@router.put("/reservas/{reserva_id}/estado")
+@router.put("/{reserva_id}/estado")
 def cambiar_estado(
     reserva_id: int,
-    estado: str,
+    estado: str, # Aquí recibirá "aceptar" o "rechazar" según tu Angular
     db: Session = Depends(get_db)
 ):
-    reserva = db.query(models.ReservaAsesoria)\
-        .filter(models.ReservaAsesoria.id == reserva_id)\
-        .first()
-
+    reserva = db.query(models.ReservaAsesoria).filter(models.ReservaAsesoria.id == reserva_id).first()
     if not reserva:
         raise HTTPException(status_code=404, detail="Reserva no encontrada")
 
-    reserva.estado = estado
+    # Mapeo opcional si quieres guardar estados estándar:
+    nuevo_estado = "CONFIRMADA" if estado == "aceptar" else "CANCELADA"
+    reserva.estado = nuevo_estado
+    
     db.commit()
-
-    return {"mensaje": f"Reserva actualizada a {estado}"}
+    return {"mensaje": f"Reserva actualizada a {nuevo_estado}"}
 
 @router.get(
     "/solicitante/{solicitante_id}",
@@ -185,60 +184,6 @@ def reservas_por_programador(
 
 from fastapi import HTTPException
 
-@router.put("/{reserva_id}/estado")
-def cambiar_estado_reserva(
-    reserva_id: int,
-    estado: str,
-    db: Session = Depends(get_db)
-):
-    reserva = db.query(models.ReservaAsesoria).filter(
-        models.ReservaAsesoria.id == reserva_id
-    ).first()
-
-    if not reserva:
-        raise HTTPException(status_code=404, detail="Reserva no encontrada")
-
-    estados_validos = ["PENDIENTE", "CONFIRMADA", "CANCELADA", "COMPLETADA"]
-
-    if estado not in estados_validos:
-        raise HTTPException(status_code=400, detail="Estado inválido")
-
-    reserva.estado = estado
-    db.commit()
-    db.refresh(reserva)
-
-    return reserva
-
-
-
-@router.put("/{reserva_id}/cancelar")
-def cancelar_reserva(
-    reserva_id: int,
-    db: Session = Depends(get_db)
-):
-    reserva = db.query(models.ReservaAsesoria).filter(
-        models.ReservaAsesoria.id == reserva_id
-    ).first()
-
-    if not reserva:
-        raise HTTPException(status_code=404, detail="Reserva no encontrada")
-
-    # Cambiar estado de la reserva
-    reserva.estado = "CANCELADA"
-
-    # Liberar la hora
-    hora = db.query(models.HoraAsesoria).filter(
-        models.HoraAsesoria.id == reserva.hora_asesoria_id
-    ).first()
-
-    if hora:
-        hora.reservado = "N"
-
-    db.commit()
-
-    return {
-        "mensaje": "Reserva cancelada correctamente"
-    }
 
 @router.get("/cliente/{cliente_id}")
 def reservas_por_cliente(
@@ -250,6 +195,21 @@ def reservas_por_cliente(
     ).all()
 
     return reservas
+
+@router.get("/estadisticas/reporte")
+def obtener_reporte_asesorias(db: Session = Depends(get_db)):
+    # Contamos directamente en la base de datos de FastAPI
+    totales = db.query(models.ReservaAsesoria).count()
+    aceptadas = db.query(models.ReservaAsesoria).filter(models.ReservaAsesoria.estado == "CONFIRMADA").count()
+    pendientes = db.query(models.ReservaAsesoria).filter(models.ReservaAsesoria.estado == "PENDIENTE").count()
+    rechazadas = db.query(models.ReservaAsesoria).filter(models.ReservaAsesoria.estado == "CANCELADA").count()
+    
+    return {
+        "totales": totales,
+        "aceptadas": aceptadas,
+        "pendientes": pendientes,
+        "rechazadas": rechazadas
+    }
 
 
 
